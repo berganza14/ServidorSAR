@@ -5,19 +5,20 @@ import szasar
 
 PORT = 6012
 FILES_PATH = "files"
+USERS_PATH = "users"
 MAX_FILE_SIZE = 10 * 1 << 20 # 10 MiB
 SPACE_MARGIN = 50 * 1 << 20  # 50 MiB
 USERS = ("anonimous", "sar", "sza")
 PASSWORDS = ("", "sar", "sza")
 
 class State:
-	Identification, Authentication, Main, Downloading, Uploading = range(5)
+	Authentication, Main, Downloading, Uploading = range(5)
 
 def sendOK( s, params="" ):
-	s.sendall( ("OK{}\r\n".format( params )).encode( "ascii" ) )
+	s.sendall( ("OK+{}\r\n".format( params )).encode( "ascii" ) )
 
 def sendER( s, code=1 ):
-	s.sendall( ("ER{}\r\n".format( code )).encode( "ascii" ) )
+	s.sendall( ("ER-{}\r\n".format( code )).encode( "ascii" ) )
 
 def session( s ):
 	state = State.Identification
@@ -26,46 +27,39 @@ def session( s ):
 		message = szasar.recvline( dialog ).decode( "ascii" )
 		if not message:
 			return
-
-		if message.startswith( szasar.Command.User ):
-			if( state != State.Identification ):
+		
+                #AUTH
+		if message.startswith( szasar.Command.Authenticate ):
+			if( state != State.Authentication ):
 				sendER( s )
 				continue
 			try:
-				user = USERS.index( message[4:] )
+				user = USERS.index( message[4:].split("|")[0] )
+				pswd = USERS.index( message[4:].split("|")[1] )
 			except:
-				sendER( s, 2 )
+				sendER( s, 6 )
 			else:
-				sendOK( s )
-				state = State.Authentication
-
-		elif message.startswith( szasar.Command.Password ):
-			if state != State.Authentication:
-				sendER( s )
-				continue
-			if( user == 0 or PASSWORDS[user] == message[4:] ):
 				sendOK( s )
 				state = State.Main
-			else:
-				sendER( s, 3 )
-				state = State.Identification
 
-		elif message.startswith( szasar.Command.List ):
+                #LSUS
+		elif message.startswith( szasar.Command.UserList ):
 			if state != State.Main:
 				sendER( s )
 				continue
 			try:
-				message = "OK\r\n"
-				for filename in os.listdir( FILES_PATH ):
-					filesize = os.path.getsize( os.path.join( FILES_PATH, filename ) )
-					message += "{}?{}\r\n".format( filename, filesize )
+				message = "OK+"
+				for username in os.listdir( USERS_PATH ):
+                                        #usr1|usr2|usr3|...|usrn|\r\n
+                                        #Como hacer para q no quede la ultima barra?    
+					message += "{}|".format( username )
 				message += "\r\n"
 			except:
 				sendER( s, 4 )
 			else:
 				s.sendall( message.encode( "ascii" ) )
-
-		elif message.startswith( szasar.Command.Download ):
+                #LSPH
+		elif message.startswith( szasar.Command.PhotoList ):
 			if state != State.Main:
 				sendER( s )
 				continue
@@ -78,9 +72,9 @@ def session( s ):
 			else:
 				sendOK( s, filesize )
 				state = State.Downloading
-
-		elif message.startswith( szasar.Command.Download2 ):
-			if state != State.Downloading:
+                #PICT
+		elif message.startswith( szasar.Command.Picture ):
+			if state != State.Uploading:
 				sendER( s )
 				continue
 			state = State.Main
@@ -92,7 +86,7 @@ def session( s ):
 			else:
 				sendOK( s )
 				s.sendall( filedata )
-
+                #UPLO
 		elif message.startswith( szasar.Command.Upload ):
 			if state != State.Main:
 				sendER( s )
@@ -111,8 +105,8 @@ def session( s ):
 				continue
 			sendOK( s )
 			state = State.Uploading
-
-		elif message.startswith( szasar.Command.Upload2 ):
+                #PHOT
+		elif message.startswith( szasar.Command.Photo ):
 			if state != State.Uploading:
 				sendER( s )
 				continue
@@ -125,27 +119,14 @@ def session( s ):
 				sendER( s, 10 )
 			else:
 				sendOK( s )
-
-		elif message.startswith( szasar.Command.Delete ):
-			if state != State.Main:
-				sendER( s )
-				continue
-			if user == 0:
-				sendER( s, 7 )
-				continue
-			try:
-				os.remove( os.path.join( FILES_PATH, message[4:] ) )
-			except:
-				sendER( s, 11 )
-			else:
-				sendOK( s )
-
-		elif message.startswith( szasar.Command.Exit ):
+                
+                #QUIT
+		elif message.startswith( szasar.Command.Quit ):
 			sendOK( s )
 			return
-
+                #Si llega aquí, comando desconocido (ERR 2)
 		else:
-			sendER( s )
+			sendER( s, 2 )
 
 
 

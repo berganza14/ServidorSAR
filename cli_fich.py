@@ -2,7 +2,7 @@
 
 import socket, sys, os
 import szasar
-
+#hoka
 SERVER = 'localhost'
 PORT = 6012
 ER_MSG = (

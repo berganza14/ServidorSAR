@@ -12,7 +12,7 @@ USERS = ("anonimous", "sar", "sza")
 PASSWORDS = ("", "sar", "sza")
 
 class State:
-	Authentication, Main, Downloading, Uploading = range(5)
+	Authentication, Main, Downloading, Uploading = range(4)
 
 def sendOK( s, params="" ):
 	s.sendall( ("OK+{}\r\n".format( params )).encode( "ascii" ) )
@@ -27,8 +27,8 @@ def session( s ):
 		message = szasar.recvline( dialog ).decode( "ascii" )
 		if not message:
 			return
-		
-                #AUTH
+
+        #AUTH - Abrir sesion
 		if message.startswith( szasar.Command.Authenticate ):
 			if( state != State.Authentication ):
 				sendER( s )
@@ -39,10 +39,17 @@ def session( s ):
 			except:
 				sendER( s, 6 )
 			else:
-				sendOK( s )
-				state = State.Main
+				#El user y pswd no pueden tener el caracter "|"
+				if "|" not in pswd:
+					if "|" not in pswd:
+						sendOK( s )
+						state = State.Main:
+					else:
+				else:
+					sendER( s, 6)
+					state = State.Identification
 
-                #LSUS
+        #LSUS - Solicitud de listado de usuarios
 		elif message.startswith( szasar.Command.UserList ):
 			if state != State.Main:
 				sendER( s )
@@ -51,14 +58,19 @@ def session( s ):
 				message = "OK+"
 				for username in os.listdir( USERS_PATH ):
                                         #usr1|usr2|usr3|...|usrn|\r\n
-                                        #Como hacer para q no quede la ultima barra?    
-					message += "{}|".format( username )
+                                        #Como hacer para q no quede la ultima barra?
+										#Pones la barra antes y empiezas msg con user
+					if(message == "OK+"):
+						message += username
+					else:
+						message += "|{}".format( username )
 				message += "\r\n"
 			except:
-				sendER( s, 4 )
+				sendER( s, 7 )
 			else:
 				s.sendall( message.encode( "ascii" ) )
-                #LSPH
+
+		#LSPH - Solicitud de listado de fotos de usuario
 		elif message.startswith( szasar.Command.PhotoList ):
 			if state != State.Main:
 				sendER( s )
@@ -119,7 +131,7 @@ def session( s ):
 				sendER( s, 10 )
 			else:
 				sendOK( s )
-                
+
                 #QUIT
 		elif message.startswith( szasar.Command.Quit ):
 			sendOK( s )

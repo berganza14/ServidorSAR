@@ -34,8 +34,7 @@ def session( s ):
 				sendER( s )
 				continue
 			try:
-				user = USERS.index( message[4:].split("|")[0] )
-				pswd = USERS.index( message[4:].split("|")[1] )
+				user, pswd = USERS.index( message[4:].split("|"))
 			except:
 				sendER( s, 6 )
 			else:
@@ -74,7 +73,7 @@ def session( s ):
 		elif message.startswith( szasar.Command.PhotoList ):
 			if state != State.Main:
 				sendER( s )
-				continue
+        				continue
 			filename = os.path.join( FILES_PATH, message[4:] )
 			try:
 				filesize = os.path.getsize( filename )
@@ -84,15 +83,21 @@ def session( s ):
 			else:
 				sendOK( s, filesize )
 				state = State.Downloading
-                #PICT
+                #PICT - Solicitud de compartir una foto
 		elif message.startswith( szasar.Command.Picture ):
-			if state != State.Uploading:
+			if state != State.Main:
 				sendER( s )
 				continue
-			state = State.Main
+			state = State.Uploading
+			
+			descrp, filesize = message[4:].split("|")
+
+			if filesize > MAX_FILE_SIZE:
+                                sendER ( s, 9 )
+                                 
 			try:
-				with open( filename, "rb" ) as f:
-					filedata = f.read()
+				with open( os.path.join( FILES_PATH, filename), "wb" ) as f:
+					f.write( filedata )
 			except:
 				sendER( s, 6 )
 			else:

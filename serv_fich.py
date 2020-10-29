@@ -10,7 +10,9 @@ MAX_FILE_SIZE = 10 * 1 << 20 # 10 MiB
 SPACE_MARGIN = 50 * 1 << 20  # 50 MiB
 USERS = ("anonimous", "sar", "sza")
 PASSWORDS = ("", "sar", "sza")
-
+logged_user=""
+NAME = ""
+ID = "00000"
 class State:
 	Authentication, Main, Downloading, Uploading = range(4)
 
@@ -44,6 +46,7 @@ def session( s ):
 					if "|" not in pswd:
 						sendOK( s )
 						state = State.Main:
+						logged_user=user
 					else:
 				else:
 					sendER( s, 6)
@@ -60,31 +63,42 @@ def session( s ):
                                         #usr1|usr2|usr3|...|usrn|\r\n
                                         #Como hacer para q no quede la ultima barra?
 										#Pones la barra antes y empiezas msg con user
-					if(message == "OK+"):
-						message += username
-					else:
-						message += "|{}".format( username )
+
+				message += "{}|".format( username ) #comprobar ultimo
 				message += "\r\n"
 			except:
 				sendER( s, 7 )
 			else:
-				s.sendall( message.encode( "ascii" ) )
+				s.sendOK( message.encode( "ascii" ) )
 
 		#LSPH - Solicitud de listado de fotos de usuario
 		elif message.startswith( szasar.Command.PhotoList ):
 			if state != State.Main:
 				sendER( s )
 				continue
-			filename = os.path.join( FILES_PATH, message[4:] )
+			user = message[4:]
+			if(user == ""):
+				user = logged_user
 			try:
-				filesize = os.path.getsize( filename )
+				message == "OK+"
+				if(FILES_PATH != ""): #comprobamos que la carpeta de fotos no este vacia(FALTA COMPLETAR)
+					enviar = ""
+					for photo_name in os.listdir(FILES_PATH):
+						usuario = photo_name.split("|")[1]
+						foto_info =  photo_name.split("|")[0]
+						usuario = usuario.split("/")[0]
+						if(usuario == user):
+							enviar = enviar + "{}|".format(foto_info) #falta primera instancia
+				else:
+					sendER( s, 8 )
+
 			except:
 				sendER( s, 5 )
 				continue
 			else:
-				sendOK( s, filesize )
-				state = State.Downloading
-                #PICT
+				s.sendOK(enviar)
+
+        #PICT - Solicitud de subida de una foto
 		elif message.startswith( szasar.Command.Picture ):
 			if state != State.Uploading:
 				sendER( s )
@@ -98,39 +112,50 @@ def session( s ):
 			else:
 				sendOK( s )
 				s.sendall( filedata )
-                #UPLO
+
+		#UPLO - Subida de una foto
 		elif message.startswith( szasar.Command.Upload ):
-			if state != State.Main:
+			if state != State.Uploading:
 				sendER( s )
 				continue
 			if user == 0:
 				sendER( s, 7 )
 				continue
-			filename, filesize = message[4:].split('?')
-			filesize = int(filesize)
-			if filesize > MAX_FILE_SIZE:
-				sendER( s, 8 )
+
+			new_id = int(ID)+1
+			if(new_id > 99999):
+				sendER( s, 10 )
 				continue
-			svfs = os.statvfs( FILES_PATH )
-			if filesize + SPACE_MARGIN > svfs.f_bsize * svfs.f_bavail:
-				sendER( s, 9 )
+			new_id = str(new_id)
+			ID = new_id
+			name_upload = new_id + NAME
+			try:
+				with open(os.path.join(FILES_PATH, NAME), "wb") as f:
+					f.write(file.encode("ascii"))
+			except:
+				sendER( s )
 				continue
-			sendOK( s )
-			state = State.Uploading
-                #PHOT
+			os.rename(os.path.join(FILES_PATH, NAME), os.path.join(FILES_PATH, name_upload))
+			NAME = name_upload
+			sendOK( s, new_id )
+			state = State.Main
+
+        #PHOT - Solicitud de descarga de una foto
 		elif message.startswith( szasar.Command.Photo ):
 			if state != State.Uploading:
 				sendER( s )
 				continue
 			state = State.Main
+			file_size = os.path.getsize
 			try:
-				with open( os.path.join( FILES_PATH, filename), "wb" ) as f:
+				with open( os.path.join( FILES_PATH, filename), "rb" ) as f:
 					filedata = szasar.recvall( s, filesize )
-					f.write( filedata )
+					file = f.read()
 			except:
 				sendER( s, 10 )
 			else:
-				sendOK( s )
+				enviar = str(filesize) + '|' + file.decode()
+				sendOK( s , enviar)
 
                 #QUIT
 		elif message.startswith( szasar.Command.Quit ):

@@ -36,19 +36,28 @@ def session( s ):
 				sendER( s )
 				continue
 			try:
-				user, pswd = USERS.index( message[4:].split("|"))
+				if ("|" not in user) and ("|" not in pswd):
+					user, pswd = message[4:].split("|")
+					user_id = USERS.index( user )
+					pswd_id = PASSWORDS.index( pswd )
+					if(user_id != pswd_id):
+						sendER( s, 6 )
+						continue
+				else:
+					sendER( s, 6 )
+					continue
 			except:
 				sendER( s, 6 )
 			else:
-				#El user y pswd no pueden tener el caracter "|"
-				if "|" not in pswd:
-					if "|" not in pswd:
+
 						sendOK( s )
 						state = State.Main:
-						logged_user=user
+						logged_user=user ## REVIEW:
 					else:
+						null
 				else:
 					sendER( s, 6)
+					continue
 					state = State.Identification
 
         #LSUS - Solicitud de listado de usuarios
@@ -58,13 +67,7 @@ def session( s ):
 				continue
 			try:
 				message = "OK+"
-				for username in os.listdir( USERS_PATH ):
-                                        #usr1|usr2|usr3|...|usrn|\r\n
-                                        #Como hacer para q no quede la ultima barra?
-										#Pones la barra antes y empiezas msg con user
-
-				message += "{}|".format( username ) #comprobar ultimo
-				message += "\r\n"
+				message = "|".join( USERS )
 			except:
 				sendER( s, 7 )
 			else:
@@ -80,9 +83,9 @@ def session( s ):
 				user = logged_user
 			try:
 				message == "OK+"
-				if(FILES_PATH != ""): #comprobamos que la carpeta de fotos no este vacia(FALTA COMPLETAR)
+				if(os.listdir(FILES_PATH) != []):
 					enviar = ""
-					for photo_name in os.listdir(FILES_PATH):
+					for photo_name in os.listdir(FILES_PATH): #falta get name de photo_name (devuelve la foto)
 						usuario = photo_name.split("|")[1]
 						foto_info =  photo_name.split("|")[0]
 						usuario = usuario.split("/")[0]
@@ -95,9 +98,9 @@ def session( s ):
 				sendER( s, 5 )
 				continue
 			else:
-				sendOK( s, filesize )
-				state = State.Downloading
-                #PICT - Solicitud de compartir una foto
+				sendOK( enviar)
+
+        #PICT - Solicitud de compartir una foto
 		elif message.startswith( szasar.Command.Picture ):
 			if state != State.Main:
 				sendER( s )

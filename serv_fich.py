@@ -17,13 +17,13 @@ class State:
 	Authentication, Main, Downloading, Uploading = range(4)
 
 def sendOK( s, params="" ):
-	s.sendall( ("OK+{}\r\n".format( params )).encode( "ascii" ) )
-
+	s.sendall( ("OK+{}\r\n".format( params )).encode( ) )
+	#Por defecto se codifica en UTF-8
 def sendER( s, code=1 ):
-	s.sendall( ("ER-{}\r\n".format( code )).encode( "ascii" ) )
+	s.sendall( ("ER-{}\r\n".format( code )).encode( ) )
 
 def session( s ):
-	state = State.Identification
+	state = State.Authentication
 
 	while True:
 		message = szasar.recvline( dialog ).decode( "ascii" )
@@ -36,6 +36,8 @@ def session( s ):
 				sendER( s )
 				continue
 			try:
+				#Comprobamos que los credenciales no contengan
+				#el caracter "|"
 				if ("|" not in user) and ("|" not in pswd):
 					user, pswd = message[4:].split("|")
 					user_id = USERS.index( user )
@@ -48,17 +50,11 @@ def session( s ):
 					continue
 			except:
 				sendER( s, 6 )
+				continue
 			else:
-
-						sendOK( s )
-						state = State.Main:
-						logged_user=user ## REVIEW:
-					else:
-						null
-				else:
-					sendER( s, 6)
-					continue
-					state = State.Identification
+				sendOK( s )
+				state = State.Main
+				logged_user=user
 
         #LSUS - Solicitud de listado de usuarios
 		elif message.startswith( szasar.Command.UserList ):
@@ -67,30 +63,39 @@ def session( s ):
 				continue
 			try:
 				message = "OK+"
+				#Se añaden los usuarios intercalados con "|"
 				message = "|".join( USERS )
 			except:
 				sendER( s, 7 )
 			else:
-				s.sendOK( message.encode( "ascii" ) )
+				s.sendOK( message.encode(  ) )
 
 		#LSPH - Solicitud de listado de fotos de usuario
 		elif message.startswith( szasar.Command.PhotoList ):
 			if state != State.Main:
 				sendER( s )
 				continue
+			#Si no se especifica el usuario
+			#se usa el actual logeado
 			user = message[4:]
 			if(user == ""):
 				user = logged_user
 			try:
 				message == "OK+"
+				#Se comprueba que exista la carpeta de las fotos
 				if(os.listdir(FILES_PATH) != []):
 					enviar = ""
-					for photo_name in os.listdir(FILES_PATH): #falta get name de photo_name (devuelve la foto)
-						usuario = photo_name.split("|")[1]
-						foto_info =  photo_name.split("|")[0]
-						usuario = usuario.split("/")[0]
+					#Se iteran todos los nombres de los archivos y
+					#se seleccionan solo los del usuario de acuerdo al
+					#patron 00000descripcion-usuario_peso_.JPG
+					for photo_name in os.listdir(FILES_PATH):
+						foto_info =  photo_name.split("-")[0]
+						usuario_peso = photo_name.split("-")[1]
+						usuario = usuario_peso.split("_")[0]
 						if(usuario == user):
-							enviar = enviar + "{}|".format(foto_info) #falta primera instancia
+							enviar = enviar + "{}|".format(foto_info)
+					#Se elimina el ultimo | restante
+					enviar = enviar[:-1:]
 				else:
 					sendER( s, 8 )
 
@@ -108,13 +113,16 @@ def session( s ):
 			state = State.Uploading
 
 			descrp, filesize = message[4:].split("|")
+			NAME = descrp + "-" + logged_user + "_" + filesize + ".JPG"
 
 			if filesize > MAX_FILE_SIZE:
-                                sendER ( s, 9 )
-
+                sendER ( s, 9 )
+				continue
 			try:
-				with open( os.path.join( FILES_PATH, filename), "wb" ) as f:
-					f.write( filedata )
+				#Se hace un open para unicamente crear el archivo con
+				#el nombre provisional con los datos actuales
+				with open( os.path.join( FILES_PATH, NAME), "wb" ) as f:
+					pass
 			except:
 				sendER( s, 6 )
 			else:
@@ -130,7 +138,11 @@ def session( s ):
 				sendER( s, 7 )
 				continue
 
+			foto = message[4:]
+
+			#Se contabiliza la nueva id
 			new_id = int(ID)+1
+			#Se comprueba que este dentro del limite
 			if(new_id > 99999):
 				sendER( s, 10 )
 				continue
@@ -138,11 +150,13 @@ def session( s ):
 			ID = new_id
 			name_upload = new_id + NAME
 			try:
+				#Se escriben los datos recividos en el archivo provisional
 				with open(os.path.join(FILES_PATH, NAME), "wb") as f:
-					f.write(file.encode("ascii"))
+					f.write(foto.encode())
 			except:
 				sendER( s )
 				continue
+			#Se actualiza el nombre con los nuevos datos
 			os.rename(os.path.join(FILES_PATH, NAME), os.path.join(FILES_PATH, name_upload))
 			NAME = name_upload
 			sendOK( s, new_id )
@@ -150,22 +164,31 @@ def session( s ):
 
         #PHOT - Solicitud de descarga de una foto
 		elif message.startswith( szasar.Command.Photo ):
-			if state != State.Uploading:
+			if state != State.Main:
 				sendER( s )
 				continue
-			state = State.Main
+			id = message[4:]
 			file_size = os.path.getsize
+			encontrado = False
 			try:
-				with open( os.path.join( FILES_PATH, filename), "rb" ) as f:
-					filedata = szasar.recvall( s, filesize )
-					file = f.read()
+				for photo_name in os.listdir(FILES_PATH):
+					photo_id = photo_name[0:4]
+					if(photo_id == id):
+						nom_desc = photo_name
+						encontrado = True
+				if(encontrado):
+					with open( os.path.join( FILES_PATH, nom_desc), "rb" ) as f:
+						file = f.read()
+				else:
+					sendER( s, 11)
+					continue
 			except:
-				sendER( s, 10 )
+				sendER( s, 12 )
 			else:
 				enviar = str(filesize) + '|' + file.decode()
-				sendOK( s , enviar)
+				s.sendall(enviar)
 
-                #QUIT
+        #QUIT
 		elif message.startswith( szasar.Command.Quit ):
 			sendOK( s )
 			return
